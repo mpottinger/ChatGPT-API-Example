@@ -1,0 +1,11 @@
+opencv-python
+flask
+python-ffmpeg
+pyaudio
+pyttsx3
+elevenlabslib
+requests
+dropbox
+ffpyplayer
+soundfile
+sounddevice

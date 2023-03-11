@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Record Audio Demo</title>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            display: flex;
+            height: 100%;
+        }
+
+        .column {
+            flex: 1;
+            padding: 10px;
+        }
+
+        .input-field {
+            display: flex;
+            flex-direction: column;
+            height: 50%;
+        }
+
+        .input-field label {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        /* Add styles for the message textarea */
+        .message-input {
+            flex-grow: 1;
+            margin-bottom: 5px;
+            border: 1px solid #ccc; /* add border for visual clarity */
+            resize: none; /* disable resizing */
+        }
+
+        /* Remove the height of the conversation textarea */
+        .conversation-window {
+            flex-grow: 1;
+            margin-top: 5px;
+            border: 1px solid #ccc; /* add border for visual clarity */
+            resize: none; /* disable resizing */
+        }
+
+        #record-button {
+            font-size: 1.2em;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            background-color: green;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #record-button:hover {
+            background-color: darkgreen;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="column">
+        <button id="record-button">Start Recording</button>
+        <video id="animation-video" muted autoplay loop>
+            <source src="{{ url_for('static', filename='animation.mp4') }}" type="video/mp4"/>
+        </video>
+    </div>
+    <div class="column">
+        <div class="input-field">
+            <label for="message-input">Type your message:</label>
+            <textarea id="message-input" class="message-input"></textarea>
+        </div>
+        <div class="input-field">
+            <label for="conversation-window">Conversation Window:</label>
+            <textarea id="conversation-window" readonly class="conversation-window"></textarea>
+        </div>
+    </div>
+</div>
+
+
+<!-- Hidden audio element to playback recorded audio -->
+<audio id="chatbot-tts-audio"></audio>
+
+
+<script>
+    var animationVideo = document.getElementById("animation-video");
+
+    // Start playing the video when the page loads
+    window.onload = function () {
+        animationVideo.play();
+    };
+
+    // Handle sending text input when the user presses the Enter key
+    var textInput = document.getElementById("message-input");
+    textInput.addEventListener("keyup", function (event) {
+        if (event.which === 13) {
+            var message = textInput.value;
+            var xhr = new XMLHttpRequest();
+            xhr.onload = function (e) {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    // get the conversation window element
+                    var conversationWindow = document.getElementById("conversation-window");
+                    // add the response from the Flask app to the conversation window
+                    conversationWindow.value += xhr.responseText
+                }
+            };
+            xhr.open("POST", "/send-message");
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(JSON.stringify({message: message}));
+            // Clear the text input
+            textInput.value = "";
+
+            // get chatbot-tts-audio endpoint from Flask app
+            document.getElementById("chatbot-tts-audio").src = "/chatbot-tts-audio";
+            // play the recorded audio
+            document.getElementById("chatbot-tts-audio").play();
+        }
+    });
+
+    navigator.mediaDevices
+        .getUserMedia({audio: true})
+        .then(function (stream) {
+            // Create a MediaRecorder object to record the stream
+            var recorder = new MediaRecorder(stream);
+            var chunks = [];
+            // When the recording is complete, concatenate all the recorded chunks
+            recorder.ondataavailable = function (e) {
+                chunks.push(e.data);
+            };
+
+            // Toggle recording when the user clicks the button
+            var recordButton = document.getElementById("record-button");
+            recordButton.addEventListener("click", function () {
+                if (recorder.state === "inactive") {
+                    // reset the chunks array
+                    chunks = [];
+                    recorder.start();
+                    recordButton.innerHTML = "Stop Recording";
+                    recordButton.style.backgroundColor = "red";
+                } else {
+                    recorder.stop();
+                    recordButton.innerHTML = "Start Recording";
+                    recordButton.style.backgroundColor = "green";
+                }
+            });
+
+            // When the recording is stopped, send the recorded audio data to the Flask app
+            recorder.onstop = function () {
+                var blob = new Blob(chunks, {type: "audio/ogg; codecs=opus"});
+                var xhr = new XMLHttpRequest();
+                xhr.onload = function (e) {
+                    if (xhr.readyState === 4 && xhr.status === 200) {
+                        // get the conversation window element
+                        var conversationWindow = document.getElementById("conversation-window");
+                        // add the response from the Flask app to the conversation window
+                        conversationWindow.value += xhr.responseText
+                        // set the audio source to the recorded audio file 'recorded_audio.ogg' in static folder
+                        //document.getElementById("chatbot-tts-audio").src = "{{ url_for('static', filename='recorded_audio.ogg') }}";
+                        // get chatbot-tts-audio endpoint from Flask app
+                        document.getElementById("chatbot-tts-audio").src = "/chatbot-tts-audio";
+                        // play the recorded audio
+                        document.getElementById("chatbot-tts-audio").play();
+                    }
+                };
+                xhr.open("POST", "/save-audio");
+                xhr.send(blob);
+            };
+        })
+        .catch(function (err) {
+            console.log("Failed to get user media: " + err);
+        });
+</script>
+</body>
+</html>
